@@ -29,15 +29,36 @@ function App() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [drawingMode, setDrawingMode] = useState(null);
   const [polygonColor, setPolygonColor] = useState('#2196F3');
-  const [editingZoneIndex, setEditingZoneIndex] = useState(null);
+  const [editingModal, setEditingModal] = useState({
+    isOpen: false,
+    index: null,
+    colorPicker: false,
+  });
+
+  const mapRef = useRef();
+  const drawingManagerRef = useRef(null);
+  const inputRef = useRef();
+
+  const handleClickOutside = (event) => {
+    if (editingModal.isOpen && !event.target.closest('dialog')) {
+      setEditingModal({ isOpen: false, index: null, colorPicker: false });
+    }
+    if (showColorPicker && !event.target.closest('dialog')) {
+      setShowColorPicker(false);
+    }
+  };
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [editingModal.isOpen, showColorPicker]);
 
   useEffect(() => {
     //api hívás
     //......
   }, []);
-
-  const mapRef = useRef();
-  const drawingManagerRef = useRef(null);
 
   const onLoadMap = useCallback((map) => {
     mapRef.current = map;
@@ -60,14 +81,42 @@ function App() {
         color: polygonColor,
         coordinates: path,
       };
-      console.log('newZone', newZone);
       //api hívás a backendnek a zóna elmentésére
       //......
       setZones((currentZones) => [...currentZones, newZone]);
     } else {
       polygon.setMap(null);
     }
+
+    addPathListeners(polygon, zones.length); // Add listeners here for real-time updates
+
+    polygon.setMap(null);
     setDrawingMode(null);
+  };
+
+  const addPathListeners = (polygon, index) => {
+    const path = polygon.getPath();
+
+    const updateZoneCoordinates = () => {
+      const updatedCoordinates = path.getArray().map((latLng) => ({
+        lat: latLng.lat(),
+        lng: latLng.lng(),
+      }));
+      updateZone(index, { coordinates: updatedCoordinates });
+    };
+
+    // Listen for changes to the polygon path
+    path.addListener('set_at', updateZoneCoordinates);
+    path.addListener('insert_at', updateZoneCoordinates);
+    path.addListener('remove_at', updateZoneCoordinates);
+  };
+
+  const updateZone = (index, updatedZoneData) => {
+    setZones((currentZones) =>
+      currentZones.map((zone, i) =>
+        i === index ? { ...zone, ...updatedZoneData } : zone
+      )
+    );
   };
 
   const checkCoordinateInZone = (lat, lng) => {
@@ -95,6 +144,110 @@ function App() {
   // koordináta ellenőrzés, hogy benne van-e valamelyik zónában
   const handleCheckCoordinate = () => {
     checkCoordinateInZone(47.4979, 19.0402); // Bp közepe
+  };
+
+  const openEditingModal = (index) => {
+    setEditingModal({ isOpen: true, index });
+  };
+
+  const zoneEditingModal = () => {
+    function saveZoneName(index) {
+      const newName = inputRef.current.value;
+      if (newName) {
+        updateZone(index, { name: newName });
+        setEditingModal({ isOpen: false, index: null, colorPicker: false });
+      }
+    }
+
+    function setColor(color) {
+      updateZone(editingModal.index, { color });
+    }
+
+    function deleteZone(index) {
+      //api hívás a backendnek a zóna törlésére
+      //......
+      setZones((currentZones) => currentZones.filter((zone, i) => i !== index));
+      setEditingModal({ isOpen: false, index: null, colorPicker: false });
+    }
+
+    console.log(zones[editingModal.index]);
+
+    return (
+      <>
+        {editingModal.isOpen && (
+          <dialog
+            open={editingModal.isOpen}
+            className='top-20 z-50 p-4 border rounded-md'
+          >
+            <div className='p-4'>
+              <h2 className='text-lg font-bold'>zóna szerkesztése</h2>
+              <div className='pb-2'>
+                <p>zóna neve</p>
+                <input
+                  label='zóna neve'
+                  ref={inputRef}
+                  className='border rounded w-full p-1'
+                  type='text'
+                  defaultValue={zones[editingModal.index]?.name}
+                />
+              </div>
+
+              <div className='flex flex-row justify-center items-center gap-2'>
+                <button
+                  className='bg-green-500 text-white rounded px-2 py-1'
+                  onClick={() => saveZoneName(editingModal.index)}
+                >
+                  mentés
+                </button>
+              </div>
+              <div className='pt-2'>
+                <p>zóna színe</p>
+                {/* színválasztó */}
+                <button
+                  onClick={() =>
+                    setEditingModal({
+                      ...editingModal,
+                      colorPicker: !editingModal.colorPicker,
+                    })
+                  }
+                  className={`bg-white ${
+                    editingModal.colorPicker && 'border-black bg-slate-300'
+                  } border rounded w-8 h-8 flex justify-center items-center text-xl`}
+                >
+                  {editingModal.colorPicker ? (
+                    '✖'
+                  ) : (
+                    <div
+                      className='h-6 w-6 rounded-sm'
+                      style={{
+                        backgroundColor: zones[editingModal.index].color,
+                      }}
+                    ></div>
+                  )}
+                </button>
+                {editingModal.colorPicker && (
+                  <dialog open={editingModal.colorPicker} className='absolute'>
+                    <SketchPicker
+                      color={zones[editingModal.index].color}
+                      onChangeComplete={(color) => setColor(color.hex)}
+                      style={{ marginLeft: '20px' }}
+                    />
+                  </dialog>
+                )}
+              </div>
+              <div className='flex justify-center items-center pt-2'>
+                <button
+                  className='bg-red-500 text-white rounded px-2 py-1'
+                  onClick={() => deleteZone(editingModal.index)}
+                >
+                  törlés
+                </button>
+              </div>
+            </div>
+          </dialog>
+        )}
+      </>
+    );
   };
 
   const DrawingUi = () => {
@@ -151,6 +304,7 @@ function App() {
 
   return (
     <div className='border-black border-2 border-solid rounded'>
+      {zoneEditingModal()}
       <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY} libraries={libraries}>
         <GoogleMap
           id='map'
@@ -171,17 +325,17 @@ function App() {
                     fillOpacity: 0.4,
                     strokeColor: zone.color,
                     strokeWeight: 2,
-                    editable: editingZoneIndex === index,
+                    editable: true,
                     draggable: false,
                   }}
-                  onClick={() => alert(`Zne: ${zone.name}`)}
-                  onMouseUp={(e) => {
-                    if (editingZoneIndex === index) {
-                    }
+                  onClick={() => {
+                    console.log('click');
+                    openEditingModal(index);
                   }}
                 />
               ))}
               <DrawingUi />
+              (
               <DrawingManager
                 drawingMode={drawingMode}
                 onLoad={(dm) => (drawingManagerRef.current = dm)}
@@ -189,15 +343,17 @@ function App() {
                 options={{
                   drawingControl: false,
                   polygonOptions: {
+                    visible: true,
                     fillColor: polygonColor,
                     fillOpacity: 0.4,
                     strokeColor: polygonColor,
                     strokeWeight: 2,
-                    editable: true,
+                    editable: false,
                     draggable: false,
                   },
                 }}
               />
+              )
             </>
           )}
         </GoogleMap>
