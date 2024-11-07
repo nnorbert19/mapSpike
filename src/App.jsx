@@ -1,5 +1,5 @@
-// src/App.js
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   GoogleMap,
   LoadScript,
@@ -55,10 +55,11 @@ function App() {
     };
   }, [editingModal.isOpen, showColorPicker]);
 
-  useEffect(() => {
-    //api hívás
-    //......
-  }, []);
+  // useEffect(() => {
+  //   api hívás
+  //   ......
+  //    setZones([....])
+  // }, []);
 
   const onLoadMap = useCallback((map) => {
     mapRef.current = map;
@@ -88,7 +89,7 @@ function App() {
       polygon.setMap(null);
     }
 
-    addPathListeners(polygon, zones.length); // Add listeners here for real-time updates
+    addPathListeners(polygon, zones.length);
 
     polygon.setMap(null);
     setDrawingMode(null);
@@ -105,7 +106,6 @@ function App() {
       updateZone(index, { coordinates: updatedCoordinates });
     };
 
-    // Listen for changes to the polygon path
     path.addListener('set_at', updateZoneCoordinates);
     path.addListener('insert_at', updateZoneCoordinates);
     path.addListener('remove_at', updateZoneCoordinates);
@@ -170,8 +170,6 @@ function App() {
       setEditingModal({ isOpen: false, index: null, colorPicker: false });
     }
 
-    console.log(zones[editingModal.index]);
-
     return (
       <>
         {editingModal.isOpen && (
@@ -179,6 +177,18 @@ function App() {
             open={editingModal.isOpen}
             className='top-20 z-50 p-4 border rounded-md'
           >
+            <span
+              className='absolute right-3 top-0 text-2xl cursor-pointer hover:text-3xl hover:top-[-3px] transition-all'
+              onClick={() =>
+                setEditingModal({
+                  isOpen: false,
+                  index: null,
+                  colorPicker: false,
+                })
+              }
+            >
+              x
+            </span>
             <div className='p-4'>
               <h2 className='text-lg font-bold'>zóna szerkesztése</h2>
               <div className='pb-2'>
@@ -317,22 +327,24 @@ function App() {
             <>
               {/* zónák rajzolása */}
               {zones.map((zone, index) => (
-                <Polygon
-                  key={index}
-                  path={zone.coordinates}
-                  options={{
-                    fillColor: zone.color,
-                    fillOpacity: 0.4,
-                    strokeColor: zone.color,
-                    strokeWeight: 2,
-                    editable: true,
-                    draggable: false,
-                  }}
-                  onClick={() => {
-                    console.log('click');
-                    openEditingModal(index);
-                  }}
-                />
+                <>
+                  <Polygon
+                    key={index}
+                    path={zone.coordinates}
+                    options={{
+                      fillColor: zone.color,
+                      fillOpacity: 0.4,
+                      strokeColor: zone.color,
+                      strokeWeight: 2,
+                      editable: true,
+                      draggable: false,
+                    }}
+                    onClick={() => {
+                      console.log('click');
+                      openEditingModal(index);
+                    }}
+                  />
+                </>
               ))}
               <DrawingUi />
               (
