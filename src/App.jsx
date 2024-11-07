@@ -29,6 +29,7 @@ function App() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [drawingMode, setDrawingMode] = useState(null);
   const [polygonColor, setPolygonColor] = useState('#2196F3');
+  const [zoneDataModal, setZoneDataModal] = useState(false);
   const [editingModal, setEditingModal] = useState({
     isOpen: false,
     index: null,
@@ -89,26 +90,29 @@ function App() {
       polygon.setMap(null);
     }
 
-    addPathListeners(polygon, zones.length);
-
     polygon.setMap(null);
+
     setDrawingMode(null);
   };
 
-  const addPathListeners = (polygon, index) => {
-    const path = polygon.getPath();
+  const handlePolygonEdit = (polygon, index) => {
+    if (polygon.vertex) {
+      const newCoordinates = zones[index].coordinates;
+      newCoordinates[polygon.vertex] = {
+        lat: polygon.latLng.lat(),
+        lng: polygon.latLng.lng(),
+      };
+      updateZone(index, { coordinates: newCoordinates });
+    }
 
-    const updateZoneCoordinates = () => {
-      const updatedCoordinates = path.getArray().map((latLng) => ({
-        lat: latLng.lat(),
-        lng: latLng.lng(),
-      }));
-      updateZone(index, { coordinates: updatedCoordinates });
-    };
-
-    path.addListener('set_at', updateZoneCoordinates);
-    path.addListener('insert_at', updateZoneCoordinates);
-    path.addListener('remove_at', updateZoneCoordinates);
+    if (polygon.edge) {
+      const newCoordinates = zones[index].coordinates;
+      newCoordinates.splice(polygon.edge, 0, {
+        lat: polygon.latLng.lat(),
+        lng: polygon.latLng.lng(),
+      });
+      updateZone(index, { coordinates: newCoordinates });
+    }
   };
 
   const updateZone = (index, updatedZoneData) => {
@@ -141,13 +145,8 @@ function App() {
     return null;
   };
 
-  // koordináta ellenőrzés, hogy benne van-e valamelyik zónában
   const handleCheckCoordinate = () => {
     checkCoordinateInZone(47.4979, 19.0402); // Bp közepe
-  };
-
-  const openEditingModal = (index) => {
-    setEditingModal({ isOpen: true, index });
   };
 
   const zoneEditingModal = () => {
@@ -260,14 +259,58 @@ function App() {
     );
   };
 
+  const showZones = () => {
+    return (
+      <div className='m-2'>
+        <button
+          className='p-2 bg-white border rounded flex justify-center items-center'
+          onClick={() => setZoneDataModal(!zoneDataModal)}
+        >
+          Zónák megjelenítése
+        </button>
+        {zoneDataModal && (
+          <dialog
+            open={zoneDataModal}
+            className='top-20 z-50 p-4 border rounded-md max-w-[600px] min-w-48'
+          >
+            <span
+              className='absolute right-2 top-[-4px] text-2xl cursor-pointer hover:text-3xl hover:top-[-7px] transition-all'
+              onClick={() => setZoneDataModal(false)}
+            >
+              x
+            </span>
+            <div className='pt-2'>
+              {zones.length > 0 &&
+                zones.map((zone, index) => (
+                  <div
+                    key={index}
+                    className='flex flex-row items-center gap-2 border p-2'
+                  >
+                    <div
+                      className='min-h-6 min-w-6 rounded-sm'
+                      style={{ backgroundColor: zone.color }}
+                    ></div>
+                    <div>
+                      <p>{zone.name}</p>
+                      <p>koordináták száma:{zone.coordinates.length}</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </dialog>
+        )}
+      </div>
+    );
+  };
+
   const DrawingUi = () => {
     return (
       <div className='relative flex flex-row items-center justify-center gap-2 mt-5'>
         {/* mozgatás */}
         <button
           onClick={() => setDrawingMode(null)}
-          className={`bg-white ${
-            drawingMode == null && 'border-black bg-slate-300'
+          className={`${
+            drawingMode == null ? 'border-black bg-slate-300' : 'bg-white'
           } border rounded w-8 h-8 flex justify-center items-center`}
         >
           <FaHandPaper />
@@ -275,8 +318,8 @@ function App() {
         {/* rajzolás */}
         <button
           onClick={() => setDrawingMode('polygon')}
-          className={`bg-white ${
-            drawingMode == 'polygon' && 'border-black bg-slate-300'
+          className={`${
+            drawingMode == 'polygon' ? 'border-black bg-slate-300' : 'bg-white'
           } border rounded w-8 h-8 flex justify-center items-center`}
         >
           <FaDrawPolygon />
@@ -315,6 +358,7 @@ function App() {
   return (
     <div className='border-black border-2 border-solid rounded'>
       {zoneEditingModal()}
+      {showZones()}
       <LoadScript googleMapsApiKey={GOOGLE_MAPS_API_KEY} libraries={libraries}>
         <GoogleMap
           id='map'
@@ -340,8 +384,10 @@ function App() {
                       draggable: false,
                     }}
                     onClick={() => {
-                      console.log('click');
-                      openEditingModal(index);
+                      setEditingModal({ isOpen: true, index });
+                    }}
+                    onMouseUp={(polygon) => {
+                      handlePolygonEdit(polygon, index);
                     }}
                   />
                 </>
@@ -370,7 +416,7 @@ function App() {
           )}
         </GoogleMap>
       </LoadScript>
-      <div className='m-2'>
+      <div className='m-2 p-1'>
         <button
           className='bg-white border rounded flex justify-center items-center'
           onClick={handleCheckCoordinate}
