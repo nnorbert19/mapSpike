@@ -5,6 +5,8 @@ import {
   LoadScript,
   DrawingManager,
   Polygon,
+  Circle,
+  OverlayView,
 } from '@react-google-maps/api';
 import { SketchPicker } from 'react-color';
 import { FaDrawPolygon, FaHandPaper } from 'react-icons/fa';
@@ -36,9 +38,9 @@ function App() {
     colorPicker: false,
   });
 
-  const mapRef = useRef();
   const drawingManagerRef = useRef(null);
   const inputRef = useRef();
+  const logoLinkRef = useRef();
 
   const handleClickOutside = (event) => {
     if (editingModal.isOpen && !event.target.closest('dialog')) {
@@ -62,10 +64,22 @@ function App() {
   //    setZones([....])
   // }, []);
 
-  const onLoadMap = useCallback((map) => {
-    mapRef.current = map;
+  const onLoadMap = useCallback(() => {
     setIsLoaded(true);
   }, []);
+
+  const calculateCenter = (coordinates) => {
+    const latitudes = coordinates.map((coord) => coord.lat);
+    const longitudes = coordinates.map((coord) => coord.lng);
+
+    const latSum = latitudes.reduce((sum, lat) => sum + lat, 0);
+    const lngSum = longitudes.reduce((sum, lng) => sum + lng, 0);
+
+    return {
+      lat: latSum / latitudes.length,
+      lng: lngSum / longitudes.length,
+    };
+  };
 
   const handlePolygonComplete = (polygon) => {
     if (!isLoaded) return;
@@ -82,6 +96,7 @@ function App() {
         name: zoneName,
         color: polygonColor,
         coordinates: path,
+        logoLink: '',
       };
       //api hívás a backendnek a zóna elmentésére
       //......
@@ -123,6 +138,21 @@ function App() {
     );
   };
 
+  const deleteCoordinateAtIndex = (zoneIndex, coordIndex) => {
+    if (confirm('Biztos szeretné törölni a pontot?')) {
+      const updatedZones = [...zones];
+      const updatedCoordinates = [...updatedZones[zoneIndex].coordinates];
+      updatedCoordinates.splice(coordIndex, 1); // Remove the coordinate
+
+      updatedZones[zoneIndex] = {
+        ...updatedZones[zoneIndex],
+        coordinates: updatedCoordinates,
+      };
+
+      setZones(updatedZones);
+    }
+  };
+
   const checkCoordinateInZone = (lat, lng) => {
     if (!isLoaded) return;
 
@@ -150,10 +180,17 @@ function App() {
   };
 
   const zoneEditingModal = () => {
-    function saveZoneName(index) {
-      const newName = inputRef.current.value;
+    function saveZoneData(index) {
+      const newName = inputRef.current?.value;
+      const newLogoLink = logoLinkRef.current?.value;
       if (newName) {
-        updateZone(index, { name: newName });
+        setZones((currentZones) =>
+          currentZones.map((zone, i) =>
+            i === index
+              ? { ...zone, name: newName, logoLink: newLogoLink }
+              : zone
+          )
+        );
         setEditingModal({ isOpen: false, index: null, colorPicker: false });
       }
     }
@@ -200,11 +237,21 @@ function App() {
                   defaultValue={zones[editingModal.index]?.name}
                 />
               </div>
+              <div className='pb-2'>
+                <p>Logó/címer link</p>
+                <input
+                  label='Logó/címer link'
+                  ref={logoLinkRef}
+                  className='border rounded w-full p-1'
+                  type='text'
+                  defaultValue={zones[editingModal.index]?.logoLink}
+                />
+              </div>
 
               <div className='flex flex-row justify-center items-center gap-2'>
                 <button
                   className='bg-green-500 text-white rounded px-2 py-1'
-                  onClick={() => saveZoneName(editingModal.index)}
+                  onClick={() => saveZoneData(editingModal.index)}
                 >
                   mentés
                 </button>
@@ -370,28 +417,60 @@ function App() {
           {isLoaded && (
             <>
               {/* zónák rajzolása */}
-              {zones.map((zone, index) => (
-                <>
-                  <Polygon
-                    key={index}
-                    path={zone.coordinates}
-                    options={{
-                      fillColor: zone.color,
-                      fillOpacity: 0.4,
-                      strokeColor: zone.color,
-                      strokeWeight: 2,
-                      editable: true,
-                      draggable: false,
-                    }}
-                    onClick={() => {
-                      setEditingModal({ isOpen: true, index });
-                    }}
-                    onMouseUp={(polygon) => {
-                      handlePolygonEdit(polygon, index);
-                    }}
-                  />
-                </>
-              ))}
+              {zones.map((zone, index) => {
+                const center = calculateCenter(zone.coordinates);
+
+                return (
+                  <>
+                    <Polygon
+                      key={index}
+                      path={zone.coordinates}
+                      options={{
+                        fillColor: zone.color,
+                        fillOpacity: 0.4,
+                        strokeColor: zone.color,
+                        strokeWeight: 2,
+                        editable: true,
+                        draggable: false,
+                      }}
+                      onClick={() => {
+                        setEditingModal({ isOpen: true, index });
+                      }}
+                      onMouseUp={(polygon) => {
+                        handlePolygonEdit(polygon, index);
+                      }}
+                    />
+                    <OverlayView
+                      position={center}
+                      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                    >
+                      <div
+                        style={{
+                          color: 'black',
+                          fontWeight: 'bold',
+                          //backgroundColor: 'white',
+                          padding: '2px',
+                          fontSize: '12px',
+                          borderRadius: '3px',
+                        }}
+                      >
+                        {zone.name}
+                      </div>
+                    </OverlayView>
+                    {zone.coordinates.map((coord, coordIndex) => (
+                      <Circle
+                        key={coordIndex}
+                        center={coord}
+                        radius={20} // Small radius for easier clicking
+                        options={{ fillColor: 'red', strokeWeight: 1 }}
+                        onClick={() =>
+                          deleteCoordinateAtIndex(index, coordIndex)
+                        }
+                      />
+                    ))}
+                  </>
+                );
+              })}
               <DrawingUi />
               (
               <DrawingManager
